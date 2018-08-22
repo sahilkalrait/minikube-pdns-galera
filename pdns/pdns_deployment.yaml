@@ -1,0 +1,98 @@
+# Config Map for pdns configuration
+# Pre-requisites: (Before kubectl create/apply)
+# 1. Create with command: kubectl create configmap pdns-conf --from-file=pdns.conf=pdns.conf
+# Post-requisites: (After kubectl create/apply)
+# 2. Create Databses Schema with command:
+#       mysql -h <host_ip> -u pdns -p pdns < pdns_schema.sql
+
+---
+# Client service for connecting to PowerDNS master instance
+apiVersion: v1
+kind: Service
+metadata:
+  name: pdns
+  labels:
+    app: pdns
+spec:
+  type: NodePort
+  externalTrafficPolicy: "Local"    # To preserve Source IP of the request
+  ports:
+  - name: pdns
+    port: 53
+    nodePort: 30053
+    protocol: UDP
+  - name: pdns-tcp
+    port: 53
+    nodePort: 30053
+    protocol: TCP
+  - name: pdns-webserver
+    port: 8081
+    nodePort: 30081   # Don't use as it is exposed via nginx-ingress
+  selector:
+    app: pdns
+
+#---
+#kind: PersistentVolume
+#apiVersion: v1
+#metadata:
+#  name: pdns-log-data-volume
+#  labels:
+#    type: local
+#spec:
+#  storageClassName: manual
+#  capacity:
+#    storage: 50M
+#  accessModes:
+#    - ReadWriteOnce
+#  hostPath:
+#    path: "/mnt/pdns-log-data"
+#
+#---
+#kind: PersistentVolumeClaim
+#apiVersion: v1
+#metadata:
+#  name: pdns-log-data-claim
+#spec:
+#  storageClassName: manual
+#  accessModes:
+#    - ReadWriteOnce
+#  resources:
+#    requests:
+#      storage: 50M
+
+---
+apiVersion: apps/v1 # for versions before 1.9.0 use apps/v1beta2
+kind: Deployment
+metadata:
+  name: pdns
+spec:
+  selector:
+    matchLabels:
+      app: pdns
+  replicas: 2
+  template: # create pods using pod definition in this template
+    metadata:
+      labels:
+        app: pdns
+    spec:
+      containers:
+      - name: pdns-authoritative
+        image: psitrax/powerdns:4.1.1
+        env:
+        - name: MYSQL_AUTOCONF
+          value: "false"
+        ports:
+        - containerPort: 53
+        volumeMounts:
+        - name: config-map
+          mountPath: /etc/pdns/pdns.conf
+          subPath: pdns.conf
+#        - name: pdns-log-data
+#          mountPath: /var/log/
+      volumes:
+      - name: config-map
+        configMap:
+          name: pdns-conf
+#      - name: pdns-log-data
+#        persistentVolumeClaim:
+#          claimName: pdns-log-data-claim

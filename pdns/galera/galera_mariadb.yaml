@@ -1,0 +1,102 @@
+# Copied from https://github.com/severalnines/galera-docker-mariadb/blob/master/example-kubernetes/mariadb-ss.yml
+
+apiVersion: v1
+kind: Service
+metadata:
+  name: galera-db
+  namespace: galera-cluster
+  labels:
+    app: galera-ss
+spec:
+  ports:
+  - port: 3306
+    name: mysql
+  selector:
+    app: galera-ss
+
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: galera-ss
+  namespace: galera-cluster
+  labels:
+    app: galera-ss
+spec:
+  ports:
+  - port: 3306
+    name: mysql
+  clusterIP: None
+  selector:
+    app: galera-ss
+
+---
+
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: galera-ss
+  namespace: galera-cluster
+spec:
+  serviceName: "galera-ss"
+  replicas: 3
+  selector:
+    matchLabels:
+      app: galera-ss
+  template:
+    metadata:
+      labels:
+        app: galera-ss
+    spec:
+      containers:
+      - name: galera
+        image: severalnines/mariadb:10.1
+        ports:
+        - name: mysql
+          containerPort: 3306
+        env:
+        # kubectl create secret generic mysql-pass --from-file=password.txt
+#        - name: MYSQL_ALLOW_EMPTY_PASSWORD
+#          value: "yes"
+        - name: MYSQL_ROOT_PASSWORD
+          value: "password"
+        - name: DISCOVERY_SERVICE
+          value: "etcd-client.galera-cluster:2379"
+        - name: XTRABACKUP_PASSWORD
+          value: "password"
+        - name: CLUSTER_NAME
+          value: "mariadb_galera_ss"
+        - name: MYSQL_DATABASE
+          value: "pdns"
+        - name: MYSQL_USER
+          value: "pdns"
+        - name: MYSQL_PASSWORD
+          value: "password"
+        readinessProbe:
+          exec:
+            command:
+            - /healthcheck.sh
+            - --readiness
+          initialDelaySeconds: 120
+          periodSeconds: 1
+        livenessProbe:
+          exec:
+            command:
+            - /healthcheck.sh
+            - --liveness
+          initialDelaySeconds: 120
+          periodSeconds: 1
+        volumeMounts:
+        - name: mariadb-datadir
+          mountPath: /var/lib/mysql
+  volumeClaimTemplates:
+  - metadata:
+      name: mariadb-datadir
+    spec:
+      accessModes: [ "ReadWriteOnce" ]
+      # uncomment if using slow storageClass on AWS
+      # then no need for running pv or pvc manifests
+#      storageClassName: slow
+      resources:
+        requests:
+          storage: 500M

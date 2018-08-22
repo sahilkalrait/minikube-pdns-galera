@@ -1,0 +1,75 @@
+# Config Map for pdns configuration
+# Pre-requisites: (Before kubectl create/apply)
+# 1. Create database with name "powerdns_admin" and provide all privileges to "pdns" user
+# 2. Create configmap with command: kubectl create configmap pdns-admin-conf --from-file=config.py=pdns_admin_config.py
+
+---
+# Client service for connecting to PowerDNS master instance
+apiVersion: v1
+kind: Service
+metadata:
+  name: pdns-admin
+  labels:
+    app: pdns-admin
+spec:
+  type: NodePort
+  ports:
+  - name: pdns-webserver
+    port: 9191
+    nodePort: 30091   # Don't use as it is exposed via nginx-ingress
+  selector:
+    app: pdns-admin
+
+---
+apiVersion: apps/v1 # for versions before 1.9.0 use apps/v1beta2
+kind: Deployment
+metadata:
+  name: pdns-admin
+spec:
+  selector:
+    matchLabels:
+      app: pdns-admin
+  replicas: 2
+  template: # create pods using pod definition in this template
+    metadata:
+      labels:
+        app: pdns-admin
+    spec:
+      containers:
+      - name: pdns-admin
+        image: powerdns-admin:sk1
+        imagePullPolicy: Never            # To use local image
+        env:
+          - name: "ENVIRONMENT"
+            value: "development"
+          - name: "PDA_DB_HOST"
+            value: "galera-db.galera-cluster"
+#            value: "mysql-0.mysql"
+          - name: "PDA_DB_NAME"
+            value: "powerdns_admin"
+          - name: "PDA_DB_USER"
+            value: "pdns"
+          - name: "PDA_DB_PASSWORD"
+            value: "password"
+          - name: "PDNS_HOST"
+            value: "pdns-api.default"
+          - name: "PDNS_API_KEY"
+            value: "8c6976e5b5410415bde908bd4dee15dfb167a9c873fc4bb8a81f6f2ab448a918"
+          - name: "FLASK_APP"
+            value: "/powerdns-admin/app/__init__.py"
+        ports:
+        - containerPort: 9191
+        volumeMounts:
+        - name: config-map
+          mountPath: /powerdns-admin/config.py
+          subPath: config.py
+#        - name: pdns-log-data
+#          mountPath: /powerdns-admin/logs/
+#          subPath: powerdns_admin_logs
+      volumes:
+      - name: config-map
+        configMap:
+          name: pdns-admin-conf
+#      - name: pdns-log-data
+#        persistentVolumeClaim:
+#          claimName: pdns-log-data-claim

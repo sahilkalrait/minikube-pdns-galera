@@ -1,0 +1,85 @@
+# Config Map for pdns API configuration
+# Pre-requisites: (Before kubectl create/apply)
+# 1. Create configmap with command: kubectl create configmap pdns-api-conf --from-file=pdns-api.conf=pdns-api.conf
+
+---
+# Client service for connecting to PowerDNS master instance
+apiVersion: v1
+kind: Service
+metadata:
+  name: pdns-api
+  labels:
+    app: pdns-api
+spec:
+  type: ClusterIP
+  ports:
+  - name: pdns-api                  # Exposed via nginx-ingress
+    port: 8081
+  selector:
+    app: pdns-api
+
+#---
+#kind: PersistentVolume
+#apiVersion: v1
+#metadata:
+#  name: pdns-log-data-volume
+#  labels:
+#    type: local
+#spec:
+#  storageClassName: manual
+#  capacity:
+#    storage: 50M
+#  accessModes:
+#    - ReadWriteOnce
+#  hostPath:
+#    path: "/mnt/pdns-log-data"
+#
+#---
+#kind: PersistentVolumeClaim
+#apiVersion: v1
+#metadata:
+#  name: pdns-log-data-claim
+#spec:
+#  storageClassName: manual
+#  accessModes:
+#    - ReadWriteOnce
+#  resources:
+#    requests:
+#      storage: 50M
+
+---
+apiVersion: apps/v1 # for versions before 1.9.0 use apps/v1beta2
+kind: Deployment
+metadata:
+  name: pdns-api
+spec:
+  selector:
+    matchLabels:
+      app: pdns-api
+  replicas: 2
+  template: # create pods using pod definition in this template
+    metadata:
+      labels:
+        app: pdns-api
+    spec:
+      containers:
+      - name: pdns-api
+        image: psitrax/powerdns:4.1.1
+        env:
+        - name: MYSQL_AUTOCONF
+          value: "false"
+        ports:
+        - containerPort: 8081
+        volumeMounts:
+        - name: config-map
+          mountPath: /etc/pdns/pdns.conf
+          subPath: pdns-api.conf
+#        - name: pdns-log-data
+#          mountPath: /var/log/
+      volumes:
+      - name: config-map
+        configMap:
+          name: pdns-api-conf
+#      - name: pdns-log-data
+#        persistentVolumeClaim:
+#          claimName: pdns-log-data-claim

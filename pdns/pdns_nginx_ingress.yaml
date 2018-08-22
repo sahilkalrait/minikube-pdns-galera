@@ -1,0 +1,65 @@
+# Service to expose Nginx ingress controller on NodePort
+# We can't use LoadBalancer service as we are using minikube on local not on cloud
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: ingress-nginx
+#  namespace: ingress-nginx
+spec:
+  type: NodePort
+  ports:
+  - name: http
+    port: 80
+    targetPort: 80
+    protocol: TCP
+  - name: https
+    port: 443
+    targetPort: 443
+    protocol: TCP
+  # Added for pdns
+#  - name: dns
+#    port: 53
+#    targetPort: 53
+#    protocol: UDP
+#  - name: dns-tcp
+#    port: 53
+#    targetPort: 53
+#    protocol: TCP
+  selector:
+    app: ingress-nginx
+
+---
+# K8s Ingress Resource to define routing rules for ingress-nginx-controller
+apiVersion: extensions/v1beta1
+kind: Ingress
+metadata:
+  name: ingress-nginx
+  annotations:
+    nginx.ingress.kubernetes.io/rewrite-target: /
+spec:
+  backend:
+    serviceName: default-http-backend
+    servicePort: 80
+  rules:
+  - host: pdns.minikube
+    http:
+      paths:
+      - path: /
+        backend:
+          serviceName: pdns
+          servicePort: 8081
+  - host: pdns-api.minikube
+    http:
+      paths:
+      - path: /
+        backend:
+          serviceName: pdns-api
+          servicePort: 8081
+  - host: pdns-admin.minikube
+    http:
+      paths:
+      - path: /
+        backend:
+          serviceName: pdns-admin
+          servicePort: 9191
